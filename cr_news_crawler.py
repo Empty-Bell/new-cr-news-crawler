@@ -7,8 +7,11 @@ from datetime import datetime
 import pandas as pd
 from dotenv import load_dotenv
 
-# Use existing selenium driver setup from the unified crawler
-from cr_crawler_unified import setup_driver, auto_login
+import random
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -21,9 +24,20 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+import pandas as pd
+from dotenv import load_dotenv
+
+def get_now_kst():
+    """한국 시간(KST, UTC+9)을 반환합니다."""
+    return datetime.now(timezone(timedelta(hours=9)))
+
+# 로깅 시간을 KST로 설정
+def kst_converter(*args):
+    return get_now_kst().timetuple()
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.Formatter.converter = kst_converter
 logger = logging.getLogger(__name__)
 
 # Initialize Gemini
@@ -34,6 +48,116 @@ else:
     logger.warning("GEMINI_API_KEY is not set.")
 
 MASTER_FILE = "CR_News_Report_Master.xlsx"
+
+# ============================================================
+# 드라이버 및 로그인 관련 유틸리티 (Self-contained)
+# ============================================================
+def setup_driver(profile_path):
+    chrome_options = Options()
+    
+    # 클라우드(GitHub Actions 등) 환경 대응: 헤드리스 모드 활성화
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        logger.info("클라우드 환경 감지: 헤드리스 모드로 실행합니다.")
+    
+    # 세션 유지를 위해 공통적으로 프로필 디렉토리 적용
+    chrome_options.add_argument(f"user-data-dir={profile_path}")
+
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.add_argument("--start-maximized")
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+        "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return driver
+
+def human_type(element, text):
+    """실제 사람이 타이핑하는 것처럼 글자별로 약간의 지연을 줍니다."""
+    for char in text:
+        element.send_keys(char)
+        time.sleep(random.uniform(0.1, 0.3))
+
+def auto_login(driver):
+    """.env 파일의 정보를 바탕으로 자동 로그인을 시도합니다."""
+    email = os.getenv("CR_EMAIL")
+    password = os.getenv("CR_PASSWORD")
+    
+    if not email or not password:
+        logger.warning("CR_EMAIL 또는 CR_PASSWORD 환경 변수가 설정되지 않았습니다.")
+        return False
+
+    login_url = "https://secure.consumerreports.org/ec/account/login"
+    logger.info("자동 로그인 시도 중...")
+    driver.get(login_url)
+    
+    try:
+        wait = WebDriverWait(driver, 20)
+        # 로그인 필드 대기
+        username_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#username")))
+        password_field = driver.find_element(By.CSS_SELECTOR, "#password")
+        login_button = driver.find_element(By.CSS_SELECTOR, "button.qa-sign-in-button")
+        
+        # 사람처럼 타이핑
+        human_type(username_field, email)
+        time.sleep(random.uniform(0.5, 1.2))
+        human_type(password_field, password)
+        time.sleep(random.uniform(0.5, 1.2))
+        
+        # 로그인 버튼 클릭
+        login_button.click()
+        
+        # 로그인 완료 대기 및 성공 여부 확인
+        # 1. 충분한 대기 시간 부여
+        time.sleep(8)
+        
+        # 2. 다양한 지표로 성공 여부 판단
+        login_success = False
+        
+        # 지표 A: 'Sign In' 버튼(Label)이 사라졌는지 확인
+        try:
+            sign_in_elements = driver.find_elements(By.CSS_SELECTOR, "label#sign-in-label, .qa-sign-in-button")
+            # 요소가 없거나, 있더라도 보이지 않으면 성공 가능성 높음
+            if not sign_in_elements or not any(el.is_displayed() for el in sign_in_elements):
+                logger.info("성공 지표 A 감지: 'Sign In' 버튼이 사라짐.")
+                login_success = True
+        except:
+            pass
+
+        # 지표 B: 사용자 프로필 아이콘 또는 멤버 전용 요소가 나타났는지 확인
+        if not login_success:
+            try:
+                # 멤버 전용 클래스나 사용자 메뉴 아이콘 확인
+                member_elements = driver.find_elements(By.CSS_SELECTOR, ".cda-gnav__member--shown, .cda-gnav__account-menu, [data-gn-signin='true']")
+                if any(el.is_displayed() for el in member_elements):
+                    logger.info("성공 지표 B 감지: 멤버 전용 UI 요소 확인됨.")
+                    login_success = True
+            except:
+                pass
+
+        # 지표 C: URL 확인 (보조 수단)
+        if not login_success:
+            curr_url = driver.current_url.lower()
+            if "login" not in curr_url and "digital-login" not in curr_url:
+                logger.info("성공 지표 C 감지: 로그인 관련 URL이 아님.")
+                login_success = True
+
+        if login_success:
+            logger.info("자동 로그인 성공 확인 완료!")
+            return True
+        else:
+            logger.warning(f"로그인 성공 여부를 확신할 수 없습니다. (현재 URL: {driver.current_url})")
+            return False
+            
+    except Exception as e:
+        logger.error(f"자동 로그인 도중 에러 발생: {e}")
+        return False
 
 def analyze_article_with_llm(title, content):
     """
