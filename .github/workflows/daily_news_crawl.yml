@@ -1,0 +1,49 @@
+name: Daily CR News Crawler
+
+on:
+  schedule:
+    # 매일 아침 8시 KST (UTC 23시)
+    - cron: '0 23 * * *'
+  workflow_dispatch: # 수동 실행 버튼 활성화 (GitHub UI에서 직접 실행 가능)
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas openpyxl selenium webdriver-manager google-generativeai python-dotenv
+
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run Crawler
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CR_EMAIL: ${{ secrets.CR_EMAIL }}
+          CR_PASSWORD: ${{ secrets.CR_PASSWORD }}
+          SMTP_SERVER: "smtp.gmail.com"
+          SMTP_PORT: 587
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        run: python cr_news_crawler.py
+
+      - name: Commit and Push Master File
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add CR_News_Report_Master.xlsx
+          # 변경사항이 있을 때만 커밋 (없으면 exit 0으로 에러 방지)
+          git commit -m "Update Master Report: $(date +'%Y-%m-%d')" || exit 0
+          git push
