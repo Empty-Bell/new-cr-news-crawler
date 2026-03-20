@@ -1,10 +1,15 @@
 name: Daily CR News Crawler
 
 on:
+  push:
+    branches: [ main ]
   schedule:
     # 매일 아침 8시 KST (UTC 23시)
     - cron: '0 23 * * *'
   workflow_dispatch: # 수동 실행 버튼 활성화 (GitHub UI에서 직접 실행 가능)
+
+permissions:
+  contents: write
 
 jobs:
   crawl:
