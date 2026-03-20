@@ -2,14 +2,16 @@ import os
 import time
 import json
 import logging
+import random
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 from dotenv import load_dotenv
 
-# Use existing selenium driver setup from the unified crawler
-from cr_crawler_unified import setup_driver, auto_login
-
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -34,6 +36,94 @@ else:
     logger.warning("GEMINI_API_KEY is not set.")
 
 MASTER_FILE = "CR_News_Report_Master.xlsx"
+
+# KST 시간대 설정
+KST = timezone(timedelta(hours=9))
+
+def kst_converter(*args):
+    return datetime.now(KST).timetuple()
+
+logging.Formatter.converter = kst_converter
+
+# ============================================================
+# 유틸리티 함수 (드라이버 설정 및 로그인)
+# ============================================================
+def setup_driver(profile_path):
+    chrome_options = Options()
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        logger.info("클라우드 환경 감지: 헤드리스 모드로 실행합니다.")
+    
+    chrome_options.add_argument(f"user-data-dir={profile_path}")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.add_argument("--start-maximized")
+    
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+        "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return driver
+
+def human_type(element, text):
+    for char in text:
+        element.send_keys(char)
+        time.sleep(random.uniform(0.1, 0.3))
+
+def auto_login(driver):
+    email = os.getenv("CR_EMAIL")
+    password = os.getenv("CR_PASSWORD")
+    if not email or not password:
+        logger.warning("CR_EMAIL 또는 CR_PASSWORD 환경 변수가 설정되지 않았습니다.")
+        return False
+
+    login_url = "https://secure.consumerreports.org/ec/account/login"
+    logger.info("자동 로그인 시도 중...")
+    driver.get(login_url)
+    try:
+        wait = WebDriverWait(driver, 20)
+        username_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#username")))
+        password_field = driver.find_element(By.CSS_SELECTOR, "#password")
+        login_button = driver.find_element(By.CSS_SELECTOR, "button.qa-sign-in-button")
+        
+        human_type(username_field, email)
+        time.sleep(random.uniform(0.5, 1.2))
+        human_type(password_field, password)
+        time.sleep(random.uniform(0.5, 1.2))
+        login_button.click()
+        time.sleep(8)
+        
+        login_success = False
+        try:
+            sign_in_elements = driver.find_elements(By.CSS_SELECTOR, "label#sign-in-label, .qa-sign-in-button")
+            if not sign_in_elements or not any(el.is_displayed() for el in sign_in_elements):
+                login_success = True
+        except: pass
+
+        if not login_success:
+            member_elements = driver.find_elements(By.CSS_SELECTOR, ".cda-gnav__member--shown, .cda-gnav__account-menu")
+            if any(el.is_displayed() for el in member_elements):
+                login_success = True
+
+        if not login_success:
+            if "login" not in driver.current_url.lower():
+                login_success = True
+
+        if login_success:
+            logger.info("자동 로그인 성공 확인 완료!")
+            return True
+        else:
+            logger.warning(f"로그인 성공 여부를 확신할 수 없습니다. (URL: {driver.current_url})")
+            return False
+    except Exception as e:
+        logger.error(f"자동 로그인 도중 에러 발생: {e}")
+        return False
 
 def analyze_article_with_llm(title, content):
     """
