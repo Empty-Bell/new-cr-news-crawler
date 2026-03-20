@@ -37,6 +37,11 @@ else:
 
 MASTER_FILE = "CR_News_Report_Master.xlsx"
 
+def normalize_url(url):
+    """URL의 대소문자나 끝의 슬래시 유무 등을 통일합니다."""
+    if not url: return ""
+    return url.strip().lower().split('#')[0].split('?')[0].rstrip('/')
+
 # KST 시간대 설정
 KST = timezone(timedelta(hours=9))
 
@@ -352,9 +357,9 @@ def main():
                 if page_num == 1 and new_top_url is None:
                     new_top_url = link
                 
-                # 이전 수집 시점의 최상단 기사를 만난 경우 중단
-                if link == last_top_url:
-                    logger.info("  [!] 이전 수집 지점에 도달했습니다. 중단합니다.")
+                # 이전 수집 시점의 최상단 기사를 만난 경우 중단 (URL 정규화 비교)
+                if normalize_url(link) == normalize_url(last_top_url):
+                    logger.info(f"  [!] 이전 수집 지점({last_top_url})에 도달했습니다. 중단합니다.")
                     stop_scraping = True
                     break
                 
