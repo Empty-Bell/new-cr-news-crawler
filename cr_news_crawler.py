@@ -151,20 +151,26 @@ def analyze_article_with_llm(title, content):
          [Medium]: 당사(Samsung) 모델이 Top Pick으로 선정되었거나, 경쟁사가 Top Pick에 포함되었으나 전 부문을 휩쓰는 정도는 아닌 경우.
          [Low]: 당사 및 경쟁사 관련 특정 이슈 없이 일반적인 제품 소개나 할인, 부속품 등에 대한 내용일 경우.
 
-    IMPORTANT INSTRUCTION: ALL Text fields such as "summary", "core_insight", and "actionable_comment" MUST be written in Korean (한국어).
-    ADDITIONAL INSTRUCTION (STRICT RULES ON FORMATTING): 
-    1. "summary", "core_insight", and "actionable_comment" MUST be written as highly concise bullet points (개조식 포맷).
-    2. Write STRICTLY based on hard factual information (숫자, 등급, 순위, 선정 결과 등) without adding ANY subjective interpretations, future predictions, or personal opinions (사견/주관적 판단/추측 전면 배제).
-    3. Use a neutral, objective, and formal tone suitable for high-level executive reporting.
-    4. NO flowery adjectives or subjective verbs (e.g., Avoid "~할 것으로 보임", "~기대됨", "~가 전해짐", "~전망됨"). Just state what CR reported.
+    IMPORTANT INSTRUCTION: ALL Text fields such as "summary", "core_insight", and "actionable_comment" MUST be written in Korean (한국어) and in highly concise bullet points (개조식 포맷).
     
-    [GOOD Example for all columns]:
-    - LG 세탁기(WM3400CW) 및 건조기(WT7005CW)가 주요 부문 추천 제품(Top Pick)에 선정됨.
-    - 삼성 Bespoke AI Jet Ultra가 총점 83점을 획득하며 무선청소기 부문 1위 유지.
+    ADDITIONAL INSTRUCTION (FIELD-SPECIFIC RULES):
+    1. "summary" & "actionable_comment":
+       - MUST be written strictly based on hard factual information (숫자, 등급, 순위, 결과) without ANY subjective interpretation or personal opinion.
+       - Use a neutral, objective, and formal tone.
+       - NO flowery adjectives or subjective verbs (Avoid "~보임", "~기대됨", "~전망됨").
     
-    [BAD Example for all columns]:
-    - 삼성전자의 제품 경쟁력을 한 단계 높여줄 것으로 기대되어 긍정적임. (주관적 평어 배제 위반)
-    - 향후 시장 주도권을 확보하는 데 유리할 것으로 전망되어 대비책 마련이 필요해 보임. (개인 사견 및 추측 배제 위반)
+    2. "core_insight":
+       - MUST be an insightful analysis from the perspective of "Samsung Electronics".
+       - Focus on the strategic impact, competitive implications, or potential gaps/strengths in the market derived from the CR report.
+       - While it involves analysis, it should still be concise and bulleted (개조식).
+    
+    [GOOD Example for Summary/Actionable Comment]:
+    - LG 세탁기(WM3400CW)가 주요 부문 추천 제품(Top Pick)에 선정됨.
+    - 삼성 Bespoke AI Jet Ultra가 총점 83점을 획득하며 1위 유지.
+    
+    [GOOD Example for Core Insight (Samsung Perspective)]:
+    - 경쟁사(LG)의 특정 카테고리(세탁기) 내 독점적 지위 고착화 양상 확인.
+    - 당사(Samsung) 프리미엄 모델의 신뢰도 등급(Owner Satisfaction) 하락에 따른 브랜드 이미지 관리 필요성 제기.
 
     2. Output JSON Schema (Must be strictly valid JSON):
        {
