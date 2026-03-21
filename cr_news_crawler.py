@@ -403,14 +403,18 @@ def main():
                     "URL 링크": link
                 })
                 
-                # 타겟 필터
-                TARGET_URL_PATHS = ['/appliances/', '/electronics/', '/electronics-computers/', '/home-garden/']
-                WHITELIST_KEYWORDS = ['washer', 'dryer', 'refrigerator', 'dishwasher', 'vacuum', 'oven', 'range', 'cooktop', 'microwave', 'air purifier', 'tv', 'monitor', 'laptop', 'tablet', 'smartphone', 'cleaning', 'appliance', 'electronics']
+                # 타겟 필터 최적화 (불필요한 크롤링/LLM 토큰 낭비 방지)
+                TARGET_URL_PATHS = ['/appliances/', '/electronics/', '/electronics-computers/']
+                BLACKLIST_URL_PATHS = ['/cars/', '/babies-kids/', '/health/', '/money/', '/food/']
+                WHITELIST_KEYWORDS = ['washer', 'dryer', 'refrigerator', 'dishwasher', 'vacuum', 'oven', 'range', 'cooktop', 'microwave', 'air purifier', 'tv', 'monitor', 'laptop', 'tablet', 'smartphone', 'cleaning', 'appliance', 'electronics', 'smart home']
                 
                 link_lower = link.lower()
                 title_lower = title.strip().lower()
                 
-                is_whitelist = any(tp in link_lower for tp in TARGET_URL_PATHS) or any(kw in title_lower for kw in WHITELIST_KEYWORDS)
+                if any(bp in link_lower for bp in BLACKLIST_URL_PATHS):
+                    is_whitelist = False
+                else:
+                    is_whitelist = any(tp in link_lower for tp in TARGET_URL_PATHS) or any(kw in title_lower for kw in WHITELIST_KEYWORDS)
                 
                 if is_whitelist:
                     logger.info(f"  [+] 신규 타겟 발견: {title}")
