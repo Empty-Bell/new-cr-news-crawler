@@ -152,19 +152,19 @@ def analyze_article_with_llm(title, content):
          [Low]: 당사 및 경쟁사 관련 특정 이슈 없이 일반적인 제품 소개나 할인, 부속품 등에 대한 내용일 경우.
 
     IMPORTANT INSTRUCTION: ALL Text fields such as "summary", "core_insight", and "actionable_comment" MUST be written in Korean (한국어).
-    ADDITIONAL INSTRUCTION (STRICT RULES ON "보고용 멘트"/actionable_comment): 
-    1. MUST be written as highly concise bullet points (개조식 포맷).
+    ADDITIONAL INSTRUCTION (STRICT RULES ON FORMATTING): 
+    1. "summary", "core_insight", and "actionable_comment" MUST be written as highly concise bullet points (개조식 포맷).
     2. Write STRICTLY based on hard factual information (숫자, 등급, 순위, 선정 결과 등) without adding ANY subjective interpretations, future predictions, or personal opinions (사견/주관적 판단/추측 전면 배제).
     3. Use a neutral, objective, and formal tone suitable for high-level executive reporting.
     4. NO flowery adjectives or subjective verbs (e.g., Avoid "~할 것으로 보임", "~기대됨", "~가 전해짐", "~전망됨"). Just state what CR reported.
     
-    [GOOD Example]:
+    [GOOD Example for all columns]:
     - LG 세탁기(WM3400CW) 및 건조기(WT7005CW)가 주요 부문 추천 제품(Top Pick)에 선정됨.
     - 삼성 Bespoke AI Jet Ultra가 총점 83점을 획득하며 무선청소기 부문 1위 유지.
     
-    [BAD Example]:
-    - 삼성전자의 제품 경쟁력을 한 단계 높여줄 것으로 기대됨. (사견 배제 위반)
-    - LG전자가 시장 주도권을 확보하는 데 유리할 것으로 전망됨. (추측 배제 위반)
+    [BAD Example for all columns]:
+    - 삼성전자의 제품 경쟁력을 한 단계 높여줄 것으로 기대되어 긍정적임. (주관적 평어 배제 위반)
+    - 향후 시장 주도권을 확보하는 데 유리할 것으로 전망되어 대비책 마련이 필요해 보임. (개인 사견 및 추측 배제 위반)
 
     2. Output JSON Schema (Must be strictly valid JSON):
        {
