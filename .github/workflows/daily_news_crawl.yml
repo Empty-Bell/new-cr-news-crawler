@@ -14,6 +14,8 @@ permissions:
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -48,7 +50,7 @@ jobs:
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add CR_News_Report_Master.xlsx last_top_url.txt
+          git add CR_News_Report_Master.xlsx
           # 변경사항이 있을 때만 커밋 (없으면 exit 0으로 에러 방지)
           git commit -m "Update Master Report and High-Water Mark: $(date +'%Y-%m-%d')" || exit 0
           git push
