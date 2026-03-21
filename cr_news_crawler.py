@@ -404,17 +404,14 @@ def main():
                 })
                 
                 # 타겟 필터 최적화 (불필요한 크롤링/LLM 토큰 낭비 방지)
+                # URL에 Target 경로가 있거나 OR 타이틀에 삼성/LG, 가전 등 핵심 키워드가 있을 경우에 한해 본문을 수집하도록 개선
                 TARGET_URL_PATHS = ['/appliances/', '/electronics/', '/electronics-computers/']
-                BLACKLIST_URL_PATHS = ['/cars/', '/babies-kids/', '/health/', '/money/', '/food/']
-                WHITELIST_KEYWORDS = ['washer', 'dryer', 'refrigerator', 'dishwasher', 'vacuum', 'oven', 'range', 'cooktop', 'microwave', 'air purifier', 'tv', 'monitor', 'laptop', 'tablet', 'smartphone', 'cleaning', 'appliance', 'electronics', 'smart home']
+                WHITELIST_KEYWORDS = ['samsung', 'lg', 'washer', 'dryer', 'refrigerator', 'dishwasher', 'vacuum', 'oven', 'range', 'cooktop', 'microwave', 'air purifier', 'tv', 'monitor', 'laptop', 'tablet', 'smartphone', 'cleaning', 'appliance', 'electronics', 'smart home']
                 
                 link_lower = link.lower()
                 title_lower = title.strip().lower()
                 
-                if any(bp in link_lower for bp in BLACKLIST_URL_PATHS):
-                    is_whitelist = False
-                else:
-                    is_whitelist = any(tp in link_lower for tp in TARGET_URL_PATHS) or any(kw in title_lower for kw in WHITELIST_KEYWORDS)
+                is_whitelist = any(tp in link_lower for tp in TARGET_URL_PATHS) or any(kw in title_lower for kw in WHITELIST_KEYWORDS)
                 
                 if is_whitelist:
                     logger.info(f"  [+] 신규 타겟 발견: {title}")
