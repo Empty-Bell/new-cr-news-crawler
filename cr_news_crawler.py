@@ -320,7 +320,7 @@ def main():
     article_jobs = [] # 분석 대기 기사
     seen_links = set()
     page_num = 1
-    max_pages = 10
+    max_pages = 50
     stop_scraping = False
     total_news_count = 0
     seen_history_count = 0
@@ -391,6 +391,11 @@ def main():
                 
                 pub_date = get_parsed_date(date_raw)
                 extracted_date = pub_date.strftime("%Y-%m-%d") if pub_date else date_raw
+                
+                if pub_date and pub_date.year < 2026:
+                    logger.info(f"  [!] 2026년 이전 기사({extracted_date})에 도달했습니다. 탐색을 중단합니다.")
+                    stop_scraping = True
+                    break
                 
                 scraped_history_data.append({
                     "게재 일자": extracted_date,
