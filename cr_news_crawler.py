@@ -147,11 +147,12 @@ def analyze_article_with_llm(title, content):
          Look for 'Samsung' or 'LG'. Pay high attention to product rankings and "Recommended" status.
        
        - 3rd Filter (Classification/Importance):
-         [High]: LG 등 경쟁사가 주요 카테고리의 추천 제품(Top Pick)을 전부 휩쓸었거나, 브랜드 신뢰도 등급에 대한 새로운/중요 발표가 포함된 경우.
+         [High]: "Best TV Brands of 2026", "Best XXX of the Year" 등 연간 최고/최우수 브랜드를 선정하는 기사에서 자사(Samsung) 또는 경쟁사(LG 등)가 1위나 최상위권을 차지한 경우. 혹은 경쟁사가 주요 카테고리의 추천 제품(Top Pick)을 전부 휩쓸었거나, 브랜드 신뢰도 등급에 대한 새로운/중요 발표가 포함된 경우.
          [Medium]: 당사(Samsung) 모델이 Top Pick으로 선정되었거나, 경쟁사가 Top Pick에 포함되었으나 전 부문을 휩쓰는 정도는 아닌 경우.
          [Low]: 당사 및 경쟁사 관련 특정 이슈 없이 일반적인 제품 소개나 할인, 부속품 등에 대한 내용일 경우.
 
     IMPORTANT INSTRUCTION: ALL Text fields such as "summary", "core_insight", and "actionable_comment" MUST be written in Korean (한국어).
+    ADDITIONAL INSTRUCTION: "summary", "core_insight", and "actionable_comment" MUST be written as highly concise bullet points (개조식 포맷, e.g., "- 팩트 1\n- 팩트 2"). Write STRICTLY based on factual information without adding ANY personal opinions (사견 배제). Suit the tone for a formal executive report.
 
     2. Output JSON Schema (Must be strictly valid JSON):
        {
@@ -201,7 +202,7 @@ def get_parsed_date(date_str):
             return None
     return None
 
-def send_email_news_report(new_articles_count, total_news_count, final_df):
+def send_email_news_report(new_df, total_news_count, final_df):
     """지정된 양식에 맞춰 이메일을 발송합니다."""
     smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", 587))
@@ -211,12 +212,16 @@ def send_email_news_report(new_articles_count, total_news_count, final_df):
 
     report_date = datetime.now().strftime("%Y-%m-%d")
     
-    # 중요도 분포 계산 (오늘 날짜 기사 기준)
-    today_articles = final_df[final_df['게재 일자'].astype(str) == report_date]
-    importance_counts = today_articles['중요도'].value_counts()
-    high_cnt = importance_counts.get("High", 0)
-    mid_cnt = importance_counts.get("Medium", 0)
-    low_cnt = importance_counts.get("Low", 0)
+    # 중요도 분포 계산 (오늘 새롭게 수집된 데이터 기준)
+    if new_df is not None and not new_df.empty:
+        new_articles_count = len(new_df)
+        importance_counts = new_df['중요도'].value_counts()
+        high_cnt = importance_counts.get("High", 0)
+        mid_cnt = importance_counts.get("Medium", 0)
+        low_cnt = importance_counts.get("Low", 0)
+    else:
+        new_articles_count = 0
+        high_cnt = mid_cnt = low_cnt = 0
 
     # 메일 본문 구성
     summary_text = f"신규 게재된 기사가 없었습니다." if total_news_count == 0 else (f"총 {total_news_count}건의 신규 기사 중 타겟 기사는 없었습니다." if new_articles_count == 0 else f"총 {total_news_count}건(신규 기사) 중 {new_articles_count}건(타겟 기사)")
@@ -457,6 +462,7 @@ def main():
         new_df = pd.DataFrame(new_data)
         final_df = pd.concat([new_df, master_df], ignore_index=True)
     else:
+        new_df = pd.DataFrame()
         final_df = master_df
     
     if scraped_history_data:
@@ -491,7 +497,7 @@ def main():
 
     if not final_df.empty:
         # (4) 최종 이메일 발송
-        send_email_news_report(len(new_data), total_news_count, final_df)
+        send_email_news_report(new_df, total_news_count, final_df)
 
     driver.quit()
 
