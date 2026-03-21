@@ -141,7 +141,7 @@ def analyze_article_with_llm(title, content):
     1. Filter & Priority Algorithm:
        - 1st Filter (Targeting): 
          Whitelist keywords: Home Appliances (refrigerator, washer, dryer, dishwasher, microwave, vacuum, cooktop, wall-oven, range, air conditioner, TV, monitor, smartphone), electronics, computing.
-         Blacklist keywords: Cars, Tires, Baby items, Laundry Detergents, Food, Insurance, Finance. -> If blacklist is primary topic, "is_target" should be false.
+         Blacklist keywords: Cars, Tires, Baby items, Laundry Detergents, Food, Insurance, Finance, Food Processors, Choppers, Coffee Makers, Headphones, Blenders, Mixers, Toasters. -> If blacklist is primary topic, "is_target" should be false.
        
        - 2nd Filter (Scoring):
          Look for 'Samsung' or 'LG'. Pay high attention to product rankings and "Recommended" status.
@@ -150,6 +150,8 @@ def analyze_article_with_llm(title, content):
          [High]: LG 등 경쟁사가 주요 카테고리의 추천 제품(Top Pick)을 전부 휩쓸었거나, 브랜드 신뢰도 등급에 대한 새로운/중요 발표가 포함된 경우.
          [Medium]: 당사(Samsung) 모델이 Top Pick으로 선정되었거나, 경쟁사가 Top Pick에 포함되었으나 전 부문을 휩쓰는 정도는 아닌 경우.
          [Low]: 당사 및 경쟁사 관련 특정 이슈 없이 일반적인 제품 소개나 할인, 부속품 등에 대한 내용일 경우.
+
+    IMPORTANT INSTRUCTION: ALL Text fields such as "summary", "core_insight", and "actionable_comment" MUST be written in Korean (한국어).
 
     2. Output JSON Schema (Must be strictly valid JSON):
        {
@@ -276,20 +278,23 @@ def send_email_news_report(new_articles_count, total_news_count, final_df):
         logger.error(f"❌ 이메일 발송 실패: {e}")
 
 def main():
-    # 마지막 수집 시점의 최상단 기사 URL 확인 (신규 기사 건수 산정용)
-    HISTORY_FILE = "last_top_url.txt"
-    last_top_url = ""
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r") as f:
-                last_top_url = f.read().strip()
-            logger.info(f"Last Top Article URL: {last_top_url}")
-        except: pass
+    # 기존 데이터 로드 (마스터 파일 누적 관리 및 전체 기사 히스토리)
+    history_df = pd.DataFrame(columns=["게재 일자", "기사 제목", "URL 링크"])
+    history_links = set()
     
-    # 기존 데이터 로드 (마스터 파일 누적 관리)
     if os.path.exists(MASTER_FILE):
         try:
-            master_df = pd.read_excel(MASTER_FILE)
+            excel_data = pd.read_excel(MASTER_FILE, sheet_name=None)
+            if 'Target_Articles' in excel_data:
+                master_df = excel_data['Target_Articles']
+            else:
+                # 단일 시트 호환성용
+                master_df = list(excel_data.values())[0] if excel_data else pd.DataFrame()
+                
+            if 'All_Articles_History' in excel_data:
+                history_df = excel_data['All_Articles_History']
+                history_links = set(history_df['URL 링크'].astype(str).tolist())
+                
             existing_links = set(master_df['URL 링크'].astype(str).tolist())
         except Exception as e:
             logger.error(f"마스터 파일 로드 오류: {e}")
@@ -310,10 +315,11 @@ def main():
     article_jobs = [] # 분석 대기 기사
     seen_links = set()
     page_num = 1
-    max_pages = 5
+    max_pages = 10
     stop_scraping = False
     total_news_count = 0
-    new_top_url = None
+    seen_history_count = 0
+    scraped_history_data = [] # 전체 기사 수집 기록용
     
     # (1) 기사 목록 탐색
     while page_num <= max_pages and not stop_scraping:
@@ -353,21 +359,22 @@ def main():
                 title = item["title"]
                 card = item["element"]
                 
-                # 이번 실행의 최상단 기사 URL 저장 (첫 페이지 첫 번째 항목)
-                if page_num == 1 and new_top_url is None:
-                    new_top_url = link
+                # 이미 수집된 전체 기사 히스토리 확인
+                if link in history_links or normalize_url(link) in [normalize_url(u) for u in history_links]:
+                    seen_history_count += 1
+                    # 같은 기사를 3번 만나면 중단 (리스트 재정렬 감안)
+                    if seen_history_count >= 3:
+                        logger.info(f"  [!] 이미 수집된 기사를 여러 번({seen_history_count}회) 만났습니다. 탐색을 중단합니다.")
+                        stop_scraping = True
+                        break
+                    continue
                 
-                # 이전 수집 시점의 최상단 기사를 만난 경우 중단 (URL 정규화 비교)
-                if normalize_url(link) == normalize_url(last_top_url):
-                    logger.info(f"  [!] 이전 수집 지점({last_top_url})에 도달했습니다. 중단합니다.")
-                    stop_scraping = True
-                    break
+                # 이번 실행 안에서 이미 본 링크 처리
+                if link in seen_links:
+                    continue
                 
                 total_news_count += 1
-                
-                # 이미 수집된 타겟 기사인 경우 건너뛰기
-                if link in existing_links or link in seen_links:
-                    continue
+                seen_links.add(link)
                 
                 # 기사 날짜 추출
                 date_raw = ""
@@ -378,6 +385,13 @@ def main():
                     except: continue
                 
                 pub_date = get_parsed_date(date_raw)
+                extracted_date = pub_date.strftime("%Y-%m-%d") if pub_date else date_raw
+                
+                scraped_history_data.append({
+                    "게재 일자": extracted_date,
+                    "기사 제목": title,
+                    "URL 링크": link
+                })
                 
                 # 타겟 필터
                 TARGET_URL_PATHS = ['/appliances/', '/electronics/', '/electronics-computers/', '/home-garden/']
@@ -391,20 +405,11 @@ def main():
                 if is_whitelist:
                     logger.info(f"  [+] 신규 타겟 발견: {title}")
                     article_jobs.append({"title": title, "link": link, "pub_date": pub_date, "date_raw": date_raw})
-                    seen_links.add(link)
             
             page_num += 1
         except Exception as e:
             logger.error(f"목록 수집 중 오류: {e}")
             break
-
-    # 최상단 기사 URL 업데이트 (다음 실행용)
-    if new_top_url:
-        try:
-            with open(HISTORY_FILE, "w") as f:
-                f.write(new_top_url)
-            logger.info(f"Updated Last Top Article URL: {new_top_url}")
-        except: pass
 
     # (2) 기사 본문 분석
     for i, job in enumerate(article_jobs):
@@ -454,12 +459,37 @@ def main():
     else:
         final_df = master_df
     
+    if scraped_history_data:
+        new_history_df = pd.DataFrame(scraped_history_data)
+        final_history_df = pd.concat([new_history_df, history_df], ignore_index=True)
+    else:
+        final_history_df = history_df
+
+    # Target_Articles 정렬 및 중복 삭제
     if not final_df.empty:
         final_df = final_df.drop_duplicates(subset=['URL 링크'], keep='first')
         final_df['temp_date'] = pd.to_datetime(final_df['게재 일자'], errors='coerce')
         final_df = final_df.sort_values(by='temp_date', ascending=False).drop(columns=['temp_date'])
-        final_df.to_excel(MASTER_FILE, index=False)
         
+    # All_Articles_History 정렬 및 중복 삭제
+    if not final_history_df.empty:
+        final_history_df = final_history_df.drop_duplicates(subset=['URL 링크'], keep='first')
+        final_history_df['temp_date'] = pd.to_datetime(final_history_df['게재 일자'], errors='coerce')
+        final_history_df = final_history_df.sort_values(by='temp_date', ascending=False).drop(columns=['temp_date'])
+
+    # 엑셀 파일 시트별 저장
+    with pd.ExcelWriter(MASTER_FILE, engine='openpyxl') as writer:
+        if not final_df.empty:
+            final_df.to_excel(writer, sheet_name='Target_Articles', index=False)
+        else:
+            pd.DataFrame(columns=["게재 일자", "기사 제목", "URL 링크", "Supercategory", "Category", "언급 브랜드", "내용 요약", "핵심 인사이트", "보고용 멘트", "중요도"]).to_excel(writer, sheet_name='Target_Articles', index=False)
+        
+        if not final_history_df.empty:
+            final_history_df.to_excel(writer, sheet_name='All_Articles_History', index=False)
+        else:
+            pd.DataFrame(columns=["게재 일자", "기사 제목", "URL 링크"]).to_excel(writer, sheet_name='All_Articles_History', index=False)
+
+    if not final_df.empty:
         # (4) 최종 이메일 발송
         send_email_news_report(len(new_data), total_news_count, final_df)
 
